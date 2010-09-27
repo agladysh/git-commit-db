@@ -1,4 +1,4 @@
--- http://github.com/daurnimator/lua-tokyotyrant/commit/3841dd55246b9f459e1b6d38aaa1db785bb1cb01
+-- http://github.com/daurnimator/lua-tokyotyrant/commit/3841dd55246b9f459e1b6d38aaa1db785bb1cb01 (patched)
 -- Tokyo Tyrant interface for Lua 5.1
 -- Phoenix Sol -- phoenix@burninglabs.com
 -- Daurnimator
@@ -829,7 +829,13 @@ function tbldb:get ( pkey )
 
   local args = { pkey }
 
-  local res = assert ( self:misc ( "get" , args ) )
+-- TODO: ?! How to check if key is not found? --AG
+--  local res = assert ( self:misc ( "get" , args ) )
+  local res = self:misc ( "get" , args )
+  if not res then
+    return false
+  end
+
   local cols = { }
   for i = 1 , #res , 2 do
     cols [ res [ i ] ] = res [ i + 1 ]
