@@ -1,0 +1,189 @@
+#! /usr/bin/env luajit2
+
+pcall(require, 'luarocks.require')
+
+pcall(require, 'socket')
+pcall(require, 'socket.unix')
+
+local tokyotyrant = require 'tokyotyrant'
+
+require 'lua-nucleo.module'
+require 'lua-nucleo.strict'
+
+--------------------------------------------------------------------------------
+
+local ordered_pairs
+    = import 'lua-nucleo/tdeepequals.lua'
+    {
+      'ordered_pairs'
+    }
+
+--------------------------------------------------------------------------------
+
+local Q = function(s)
+  return ("%q"):format(s)
+end
+
+--------------------------------------------------------------------------------
+
+local tbl_connect = function(tyrant_host, tyrant_port, tbl)
+  if tbl then
+    tbl:close()
+  else
+    tbl = tokyotyrant.tbldb.new()
+  end
+
+  if tyrant_port then
+    tbl:open(tyrant_host, tyrant_port)
+  else
+    local socket_path = tyrant_host
+    tbl:openunix(socket_path)
+  end
+
+  return tbl
+end
+
+--------------------------------------------------------------------------------
+
+local actions = { }
+
+--------------------------------------------------------------------------------
+
+actions.help = function()
+  io.stdout:write("Usage:\n")
+  io.stdout:write("\n")
+  io.stdout:write("   git-commit-db <action> [options]\n")
+  io.stdout:write("\n")
+  io.stdout:write("Actions:\n")
+  io.stdout:write("\n")
+
+  for name, _ in ordered_pairs(actions) do
+    io.stdout:write(" * ", name, "\n")
+  end
+
+  io.stdout:write("\n")
+  io.stdout:flush()
+end
+
+--------------------------------------------------------------------------------
+
+actions.init_table = function(...)
+  local tbl
+
+  do
+    local nargs = select("#", ...)
+    if nargs == 1 then
+      local tyrant_socket = ...
+      tbl = tbl_connect(tyrant_socket)
+    elseif nargs == 2 then
+      local tyrant_host, tyrant_port = ...
+      tbl = tbl_connect(tyrant_host, tyrant_port)
+    else
+      io.stdout:write("Usage:\n")
+      io.stdout:write("\n")
+      io.stdout:write(
+          "   git-commit-db init {<tyrant_port>",
+          " <tyrant_host>|<tyrant_socket>}\n"
+        )
+      io.stdout:flush()
+      return
+    end
+  end
+
+  tbl:setindex("author", "lexical")
+  tbl:setindex("timestamp", "decimal")
+end
+
+--------------------------------------------------------------------------------
+
+actions.collect = function(...)
+  local tbl
+  local repo_name, path_to_repository
+
+  do
+    local nargs = select("#", ...)
+    if nargs == 3 then
+      local tyrant_socket
+      tyrant_socket, repo_name, path_to_repository = ...
+      tbl = tbl_connect(tyrant_socket)
+    elseif nargs == 4 then
+      local tyrant_host, tyrant_port
+      tyrant_host, tyrant_port, repo_name, path_to_repository = ...
+      tbl = tbl_connect(tyrant_host, tyrant_port)
+    else
+      io.stdout:write("Usage:\n")
+      io.stdout:write("\n")
+      io.stdout:write(
+          "   git-commit-db collect",
+          " {<tyrant_port> <tyrant_host>|<tyrant_socket>}",
+          " <repo_name>",
+          " <path_to_repository>\n"
+        )
+      io.stdout:flush()
+      return
+    end
+  end
+
+  local git_dir = path_to_repository:match("%.git$")
+    and path_to_repository
+     or (path_to_repository .. "/.git")
+
+  local git = [[git --git-dir=]] .. (Q(git_dir))
+  local cmd = git .. [[ rev-list HEAD]] -- TODO: Allow bare repositories.
+
+  local input = assert(io.popen(cmd, "r"))
+  for hash in input:lines() do
+    -- TODO: Can it be done without getting the data!?
+    if tbl:get(hash) then
+      io.stdout:write(". ", hash, "\n")
+    else
+      io.stdout:write("+ ", hash, "\n")
+
+      local cmd = git .. ' log'
+        .. ' -1'
+        .. ' --no-merges'
+        .. ' --pretty=format:"%at%n\\"%aN\\" <%aE>"'
+        .. ' --shortstat'
+        .. ' ' .. hash
+
+      local info_input = assert(io.popen(cmd))
+      local timestamp, author, changes = info_input:read(
+          "*l", "*l", "*l"
+        )
+      local files_changed, lines_added, lines_removed = changes:match(
+          "^"
+       .. "%s*(%d+)%s+files%s+changed,"
+       .. "%s+(%d+)%s+insertions%s*%(%+%),"
+       .. "%s+(%d+)%s+deletions%s*%(%-%)"
+       .. "%s*$"
+        )
+
+      info_input:close()
+      info_input = nil
+
+      tbl:put(
+          hash,
+          {
+            repo_name = repo_name;
+            timestamp = timestamp;
+            author = author;
+            files_changes = files_changed;
+            lines_added = lines_added;
+            lines_removed = lines_removed;
+            lines_changed = tostring(lines_added + lines_removed);
+          }
+        )
+    end
+  end
+  input:close()
+
+  io.stdout:write("\n")
+  io.stdout:write("Done\n")
+  io.stdout:write("\n")
+
+  io.stdout:flush()
+end
+
+--------------------------------------------------------------------------------
+
+(actions[select(1, ...)] or actions["help"])(select(2, ...))
