@@ -3,7 +3,8 @@
 pcall(require, 'luarocks.require')
 
 pcall(require, 'socket')
-pcall(require, 'socket.unix')
+-- TODO: Support unix domain sockets
+-- pcall(require, 'socket.unix')
 
 local tokyotyrant = require 'tokyotyrant'
 
