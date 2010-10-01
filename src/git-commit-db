@@ -143,13 +143,13 @@ actions.collect = function(...)
       local cmd = git .. ' log'
         .. ' -1'
         .. ' --no-merges'
-        .. ' --pretty=format:"%at%n\\"%aN\\" <%aE>"'
+        .. ' --pretty=format:"%at%n\\"%aN\\"%n%aE"'
         .. ' --shortstat'
         .. ' ' .. hash
 
       local info_input = assert(io.popen(cmd))
-      local timestamp, author, changes = info_input:read(
-          "*l", "*l", "*l"
+      local timestamp, author, email, changes = info_input:read(
+          "*l", "*l", "*l", "*l"
         )
       local files_changed, lines_added, lines_removed = changes:match(
           "^"
@@ -168,6 +168,7 @@ actions.collect = function(...)
             repo_name = repo_name;
             timestamp = timestamp;
             author = author;
+            email = email;
             files_changes = files_changed;
             lines_added = lines_added;
             lines_removed = lines_removed;
