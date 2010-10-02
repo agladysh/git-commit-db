@@ -1,0 +1,106 @@
+#! /usr/bin/env luajit2
+
+pcall(require, 'luarocks.require')
+
+require 'lua-nucleo.module'
+require 'lua-nucleo.strict'
+
+--------------------------------------------------------------------------------
+
+local write_data = function(data, indent)
+  indent = indent or ""
+
+  local comma
+
+  io.stdout:write(indent, "[")
+
+  for i = 1, #data do
+    io.stdout:write(
+        comma or "\n",
+--        indent, "  [ '", os.date("%Y.%m.%d %H:%M:%S", tonumber(data[i][1])), "', ", data[i][2], " ]"
+        indent, "  [ ", data[i][1], ", ", data[i][2], " ]"
+      )
+    comma = comma or ",\n"
+  end
+
+  io.stdout:write("\n", indent, "]\n")
+end
+
+--------------------------------------------------------------------------------
+
+local commits = { }
+
+local la, lrm = 0, 0
+
+for line in io.stdin:lines() do
+  local timestamp, lines_added, lines_removed = line:match(
+      "^(%d+)%s+(%d+)%s+(%d+)$"
+    )
+  assert(timestamp and lines_added and lines_removed)
+
+  local hour = os.date("*t", tonumber(timestamp)).hour
+
+  local info = commits[hour + 1]
+  if not info then
+    info = { hour, 0 }
+    commits[hour + 1] = info
+  end
+
+  info[2] = info[2] + 1
+--  info[2] = info[2] + lines_added + lines_removed
+
+  la = la + lines_added
+  lrm = lrm + lines_removed
+end
+
+--------------------------------------------------------------------------------
+
+io.stdout:write [[
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+ <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Data</title>
+    <script
+      language="javascript"
+      type="text/javascript"
+      src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"
+    ></script>
+    <script
+      language="javascript"
+      type="text/javascript"
+      src="http://flot.googlecode.com/svn/trunk/jquery.flot.js"
+    ></script>
+ </head>
+ <body>
+    <h1>Data</h1>
+
+    <div id="placeholder" style="width:1200px;height:600px"></div>
+
+<script id="source" language="javascript" type="text/javascript">
+$(function () {
+]]
+
+io.stdout:write("var hourly_commits = ")
+write_data(commits)
+
+io.stdout:write [[
+
+    $.plot($("#placeholder"), [
+        {
+            data: hourly_commits,
+            bars: { show: true }
+        },
+      ], {
+        xaxis: {
+          ticks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+            18, 19, 20, 21, 22, 23, 24]
+        }
+      });
+});
+  </script>
+</body>
+</html>
+]]
+
+io.stdout:flush()

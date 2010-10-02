@@ -1,0 +1,113 @@
+#! /usr/bin/env luajit2
+
+pcall(require, 'luarocks.require')
+
+require 'lua-nucleo.module'
+require 'lua-nucleo.strict'
+
+--------------------------------------------------------------------------------
+
+local write_data = function(data, indent)
+  indent = indent or ""
+
+  local comma
+
+  io.stdout:write(indent, "[")
+
+  for i = 1, #data do
+    io.stdout:write(
+        comma or "\n",
+--        indent, "  [ '", os.date("%Y.%m.%d %H:%M:%S", tonumber(data[i][1])), "', ", data[i][2], " ]"
+        indent, "  [ ", data[i][1], ", ", data[i][2], " ]"
+      )
+    comma = comma or ",\n"
+  end
+
+  io.stdout:write("\n", indent, "]\n")
+end
+
+--------------------------------------------------------------------------------
+
+local lines_added_data, lines_removed_data = { }, { }
+
+for line in io.stdin:lines() do
+  local timestamp, lines_added, lines_removed = line:match(
+      "^(%d+)%s+(%d+)%s+(%d+)$"
+    )
+  assert(timestamp and lines_added and lines_removed)
+
+  lines_added_data[#lines_added_data + 1] =
+  {
+    timestamp;
+    lines_added;
+  }
+
+  lines_removed_data[#lines_removed_data + 1] =
+  {
+    timestamp;
+    -lines_removed;
+  }
+end
+
+--------------------------------------------------------------------------------
+
+io.stdout:write [[
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+ <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Data</title>
+    <script
+      language="javascript"
+      type="text/javascript"
+      src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"
+    ></script>
+    <script
+      language="javascript"
+      type="text/javascript"
+      src="http://flot.googlecode.com/svn/trunk/jquery.flot.js"
+    ></script>
+ </head>
+ <body>
+    <h1>Data</h1>
+
+    <div id="placeholder" style="width:1200px;height:600px"></div>
+
+<script id="source" language="javascript" type="text/javascript">
+$(function () {
+]]
+
+io.stdout:write("var lines_added = ")
+write_data(lines_added_data)
+
+io.stdout:write("\n")
+
+io.stdout:write("var lines_removed = ")
+write_data(lines_removed_data)
+
+io.stdout:write [[
+
+    $.plot($("#placeholder"), [
+        {
+            data: lines_added,
+            lines: { show: true, fill: true },
+            dots: { show: true }
+        },
+        {
+            data: lines_removed,
+            lines: { show: true, fill: true },
+            dots: { show: true }
+        }
+      ], {
+        yaxis: {
+          min: -1000,
+          max: 1000
+        }
+      });
+});
+  </script>
+</body>
+</html>
+]]
+
+io.stdout:flush()
