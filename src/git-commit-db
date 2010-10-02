@@ -19,6 +19,12 @@ local ordered_pairs
       'ordered_pairs'
     }
 
+local tstr
+    = import 'lua-nucleo/tstr.lua'
+    {
+      'tstr'
+    }
+
 --------------------------------------------------------------------------------
 
 local Q = function(s)
@@ -132,13 +138,17 @@ actions.collect = function(...)
   local git = [[git --git-dir=]] .. (Q(git_dir))
   local cmd = git .. [[ rev-list HEAD]] -- TODO: Allow bare repositories.
 
+  local total_count, new_count = 0, 0
+
   local input = assert(io.popen(cmd, "r"))
   for hash in input:lines() do
+    total_count = total_count + 1
+
     -- TODO: Can it be done without getting the data!?
     if tbl:get(hash) then
       io.stdout:write(". ", hash, "\n")
     else
-      io.stdout:write("+ ", hash, "\n")
+      new_count = new_count + 1
 
       local cmd = git .. ' log'
         .. ' -1'
@@ -151,13 +161,36 @@ actions.collect = function(...)
       local timestamp, author, email, changes = info_input:read(
           "*l", "*l", "*l", "*l"
         )
-      local files_changed, lines_added, lines_removed = changes:match(
-          "^"
-       .. "%s*(%d+)%s+files%s+changed,"
-       .. "%s+(%d+)%s+insertions%s*%(%+%),"
-       .. "%s+(%d+)%s+deletions%s*%(%-%)"
-       .. "%s*$"
-        )
+      local files_changed, lines_added, lines_removed
+
+      if not changes then
+        io.stdout:flush()
+--[[
+        io.stderr:write(
+            "WARNING: Weird output line for commit ", hash,
+            " can't read changes:\n",
+            timestamp, "\n",
+            author, "\n",
+            email, "\n",
+            "\n",
+            "command: ", cmd, "\n"
+          )
+--]]
+        io.stderr:write("? ", hash, " : empty commit\n")
+        io.stderr:flush()
+
+        files_changed, lines_added, lines_removed = 0, 0, 0
+      else
+        io.stdout:write("+ ", hash, "\n")
+
+        files_changed, lines_added, lines_removed = changes:match(
+            "^"
+         .. "%s*(%d+)%s+files%s+changed,"
+         .. "%s+(%d+)%s+insertions%s*%(%+%),"
+         .. "%s+(%d+)%s+deletions%s*%(%-%)"
+         .. "%s*$"
+          )
+      end
 
       info_input:close()
       info_input = nil
@@ -169,9 +202,9 @@ actions.collect = function(...)
             timestamp = timestamp;
             author = author;
             email = email;
-            files_changes = files_changed;
-            lines_added = lines_added;
-            lines_removed = lines_removed;
+            files_changes = tostring(files_changed);
+            lines_added = tostring(lines_added);
+            lines_removed = tostring(lines_removed);
             lines_changed = tostring(lines_added + lines_removed);
           }
         )
@@ -180,7 +213,9 @@ actions.collect = function(...)
   input:close()
 
   io.stdout:write("\n")
-  io.stdout:write("Done\n")
+  io.stdout:write(
+      "Done (total: ", total_count, ", new: ", new_count, " commits)\n"
+    )
   io.stdout:write("\n")
 
   io.stdout:flush()
