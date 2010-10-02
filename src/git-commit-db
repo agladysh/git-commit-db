@@ -223,4 +223,80 @@ end
 
 --------------------------------------------------------------------------------
 
+actions.dump = function(...)
+  local tbl
+
+  do
+    local nargs = select("#", ...)
+    if nargs == 1 then
+      local tyrant_socket = ...
+      tbl = tbl_connect(tyrant_socket)
+    elseif nargs == 2 then
+      local tyrant_host, tyrant_port = ...
+      tbl = tbl_connect(tyrant_host, tyrant_port)
+    else
+      io.stdout:write("Usage:\n")
+      io.stdout:write("\n")
+      io.stdout:write(
+          "   git-commit-db dump {<tyrant_port>",
+          " <tyrant_host>|<tyrant_socket>}\n"
+        )
+      io.stdout:flush()
+      return
+    end
+  end
+
+  for hash, data in tbl:pairs() do
+    io.stdout:write(hash, " ", tstr(data), "\n")
+  end
+
+  io.stdout:flush()
+end
+
+--------------------------------------------------------------------------------
+
+actions.list_changes = function(...)
+  local tbl
+  local author_email -- TODO: Allow more filtering
+
+  do
+    local nargs = select("#", ...)
+    if nargs == 2 then
+      local tyrant_socket
+      tyrant_socket, author_email = ...
+      tbl = tbl_connect(tyrant_socket)
+    elseif nargs == 3 then
+      local tyrant_host, tyrant_port
+      tyrant_host, tyrant_port, author_email = ...
+      tbl = tbl_connect(tyrant_host, tyrant_port)
+    else
+      io.stdout:write("Usage:\n")
+      io.stdout:write("\n")
+      io.stdout:write(
+          "   git-commit-db list_changes {<tyrant_port>",
+          " <tyrant_host>|<tyrant_socket>} <author_email>\n"
+        )
+      io.stdout:flush()
+      return
+    end
+  end
+
+  local hashes = tbl:search(tokyotyrant.query.new():addcond("email", "streq", author_email))
+
+  if not hashes or #hashes == 0 then
+    io.stderr:write("not found\n")
+    io.stderr:flush()
+    return os.exit(1)
+  end
+
+  for i = 1, #hashes do
+    local row = assert(tbl:get(hashes[i]))
+    io.stdout:write(row.timestamp, "\t", row.lines_added, "\t", row.lines_removed, "\n")
+  end
+
+  io.stdout:flush()
+end
+
+--------------------------------------------------------------------------------
+
 (actions[select(1, ...)] or actions["help"])(select(2, ...))
